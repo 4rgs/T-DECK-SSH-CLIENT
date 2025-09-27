@@ -1,0 +1,810 @@
+#include <Arduino.h>
+#include <LovyanGFX.hpp>
+#include <Wire.h>
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <vector>
+#include "keyboard/Keyboard.h"
+#include "../include/config.h"
+#include "TouchDrvGT911.hpp"
+
+// Definir colores usando la función color565() de LovyanGFX (se definirá después del objeto display)
+
+// Pines del T-Deck según la documentación ofivoid redrawTerminal() {
+  // Limpiar TODAvoid redrawTerminal() {
+  // Limpiar TODA la pantalla excepto header y footer
+  display.fillRect(0, 21, 320, 194, TERMINAL_BLACK); // Limpiar completamente
+  display.setFont(&fonts::Font2);
+  
+  int y = 28;
+  int lineHeight = 14;
+  int maxLines = 13;
+  
+  for (int i = scrollOffset; i < terminalBuffer.size() && i < scrollOffset + maxLines; i++) {
+    if (y > 200) break;
+    
+    // Limpiar línea completamente antes de escribir
+    display.fillRect(0, y-2, 320, lineHeight, TERMINAL_BLACK);
+    
+    display.setCursor(7, y);
+    display.setTextColor(TERMINAL_GREEN, TERMINAL_BLACK);
+    display.print(terminalBuffer[i]); // Usar print en vez de println para control total
+    y += lineHeight;
+  }
+  
+  outputLine = y;
+}l completamente
+  display.fillRect(0, 20, 320, 195, TERMINAL_BLACK); // Limpiar área completa
+  display.setFont(&fonts::Font2);
+  display.setTextColor(TERMINAL_WHITE, TERMINAL_BLACK);
+  
+  int y = 28; // Empezar más arriba
+  int lineHeight = 14; // +2 píxeles por línea como solicitado
+  int maxLines = 13; // Una línea más disponible
+  
+  for (int i = scrollOffset; i < terminalBuffer.size() && i < scrollOffset + maxLines; i++) {
+    if (y > 200) break; // Dejar espacio para el input inferior
+    
+    // Limpiar la línea completamente antes de escribir
+    display.fillRect(0, y - 2, 320, lineHeight, TERMINAL_BLACK);
+    
+    display.setCursor(7, y); // Margen izquierdo aumentado de 2 a 7 píxeles
+    display.setTextColor(TERMINAL_GREEN, TERMINAL_BLACK); // Texto verde sobre fondo negro
+    
+    // Usar print en vez de println para mejor control
+    display.print(terminalBuffer[i]);
+    
+    y += lineHeight;
+  }
+  
+  outputLine = y;
+}OWERON       10
+#define BOARD_SPI_MOSI      41
+#define BOARD_SPI_MISO      38
+#define BOARD_SPI_SCK       40
+#define BOARD_TFT_CS        12
+#define BOARD_TFT_DC        11
+#define BOARD_TFT_BACKLIGHT 42
+#define BOARD_I2C_SDA       18
+#define BOARD_I2C_SCL       8
+
+// Dirección I2C del teclado T-Deck
+#define KEYBOARD_I2C_ADDR   0x55
+
+// Pines del touch y trackball
+#define BOARD_TOUCH_INT     16
+#define BOARD_TRACKBALL_UP    3
+#define BOARD_TRACKBALL_DOWN  15
+#define BOARD_TRACKBALL_LEFT  1
+#define BOARD_TRACKBALL_RIGHT 2
+#define BOARD_TRACKBALL_CLICK 0
+
+// Configuración de LovyanGFX para T-Deck
+class LGFX : public lgfx::LGFX_Device {
+  lgfx::Panel_ST7789 _panel_instance;
+  lgfx::Bus_SPI _bus_instance;
+  lgfx::Light_PWM _light_instance;
+
+public:
+  LGFX(void) {
+    {
+      auto cfg = _bus_instance.config();
+      cfg.spi_host = SPI3_HOST;
+      cfg.spi_mode = 0;
+      cfg.freq_write = 27000000;
+      cfg.freq_read = 16000000;
+      cfg.spi_3wire = false;
+      cfg.use_lock = true;
+      cfg.dma_channel = SPI_DMA_CH_AUTO;
+      cfg.pin_sclk = BOARD_SPI_SCK;    // 40
+      cfg.pin_mosi = BOARD_SPI_MOSI;   // 41
+      cfg.pin_miso = BOARD_SPI_MISO;   // 38
+      cfg.pin_dc = BOARD_TFT_DC;       // 11
+      _bus_instance.config(cfg);
+      _panel_instance.setBus(&_bus_instance);
+    }
+
+    {
+      auto cfg = _panel_instance.config();
+      cfg.pin_cs = BOARD_TFT_CS;       // 12
+      cfg.pin_rst = -1;  // No reset pin
+      cfg.pin_busy = -1; // No busy pin
+      cfg.panel_width = 240;
+      cfg.panel_height = 320;
+      cfg.offset_x = 0;
+      cfg.offset_y = 0;
+      cfg.offset_rotation = 0;
+      cfg.dummy_read_pixel = 8;
+      cfg.dummy_read_bits = 1;
+      cfg.readable = true;
+      cfg.invert = true;
+      cfg.rgb_order = true;
+      cfg.dlen_16bit = false;
+      cfg.bus_shared = true;
+      _panel_instance.config(cfg);
+    }
+
+    {
+      auto cfg = _light_instance.config();
+      cfg.pin_bl = BOARD_TFT_BACKLIGHT; // 42
+      cfg.invert = true;
+      cfg.freq = 44100;
+      cfg.pwm_channel = 1;
+      _light_instance.config(cfg);
+      _panel_instance.setLight(&_light_instance);
+    }
+
+    setPanel(&_panel_instance);
+  }
+};
+
+// Variables globales
+LGFX display;
+Keyboard keyboard;
+TouchDrvGT911 touch;
+String inputText = "";
+int outputLine = 55;
+WiFiClient sshClient;
+bool sshConnected = false;
+
+// Variables para touch y trackball
+int16_t touchX = 0, touchY = 0;
+bool touchPressed = false;
+volatile bool trackballUpPressed = false;
+volatile bool trackballDownPressed = false;
+volatile bool trackballLeftPressed = false;
+volatile bool trackballRightPressed = false;
+volatile bool trackballClickPressed = false;
+String sshBuffer = "";
+std::vector<String> terminalBuffer;
+int scrollOffset = 0;
+
+// Variables de colores (se inicializarán en setup())
+uint16_t TERMINAL_BLACK;
+uint16_t TERMINAL_WHITE; 
+uint16_t TERMINAL_GREEN;
+uint16_t TERMINAL_RED;
+uint16_t TERMINAL_BLUE;
+uint16_t TERMINAL_YELLOW;
+uint16_t TERMINAL_CYAN;
+uint16_t TERMINAL_MAGENTA;
+uint16_t TERMINAL_GRAY;
+
+// Declaraciones de funciones
+void updateDisplay();
+void executeCommand(String cmd);
+void addOutput(String text);
+void connectSSH();
+void disconnectSSH();
+void handleSSHData();
+void sendSSHCommand(String cmd);
+String cleanANSI(String input);
+void redrawTerminal();
+void handleTouch();
+void handleTrackball();
+void scrollUp();
+void scrollDown();
+void sendTabCommand();
+
+// Funciones de interrupción para trackball
+void IRAM_ATTR trackballUpISR() { trackballUpPressed = true; }
+void IRAM_ATTR trackballDownISR() { trackballDownPressed = true; }
+void IRAM_ATTR trackballLeftISR() { trackballLeftPressed = true; }
+void IRAM_ATTR trackballRightISR() { trackballRightPressed = true; }
+void IRAM_ATTR trackballClickISR() { trackballClickPressed = true; }
+
+void setup() {
+  Serial.begin(115200);
+  delay(3000);
+  Serial.println("T-Deck SSH Terminal Starting...");
+  
+  // Encender periféricos
+  pinMode(BOARD_POWERON, OUTPUT);
+  digitalWrite(BOARD_POWERON, HIGH);
+  delay(1000);
+  
+  // Inicializar I2C y teclado
+  Wire.begin(BOARD_I2C_SDA, BOARD_I2C_SCL);
+  Wire.setClock(100000);
+  keyboard.begin(KEYBOARD_I2C_ADDR);
+  
+  // Inicializar touch GT911
+  pinMode(BOARD_TOUCH_INT, INPUT);
+  touch.setPins(-1, BOARD_TOUCH_INT);
+  if (touch.begin(Wire, GT911_SLAVE_ADDRESS_L)) {
+    Serial.println("Touch GT911 initialized successfully");
+    touch.setMaxCoordinates(320, 240);
+    touch.setSwapXY(true);
+    touch.setMirrorXY(false, true);
+  } else {
+    Serial.println("Touch GT911 initialization failed");
+  }
+  
+  // Configurar trackball con interrupciones
+  pinMode(BOARD_TRACKBALL_UP, INPUT_PULLUP);
+  pinMode(BOARD_TRACKBALL_DOWN, INPUT_PULLUP);
+  pinMode(BOARD_TRACKBALL_LEFT, INPUT_PULLUP);
+  pinMode(BOARD_TRACKBALL_RIGHT, INPUT_PULLUP);
+  pinMode(BOARD_TRACKBALL_CLICK, INPUT_PULLUP);
+  
+  attachInterrupt(digitalPinToInterrupt(BOARD_TRACKBALL_UP), trackballUpISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(BOARD_TRACKBALL_DOWN), trackballDownISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(BOARD_TRACKBALL_LEFT), trackballLeftISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(BOARD_TRACKBALL_RIGHT), trackballRightISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(BOARD_TRACKBALL_CLICK), trackballClickISR, FALLING);
+  
+  // Inicializar display
+  display.init();
+  display.setRotation(1);
+  
+  // CRUCIAL: Configurar profundidad de color ANTES de usar colores
+  display.setColorDepth(16);  // RGB565 16-bit para ST7789
+  
+  // Inicializar colores usando las funciones correctas de LovyanGFX
+  TERMINAL_BLACK   = display.color565(0, 0, 0);       // Negro
+  TERMINAL_WHITE   = display.color565(255, 255, 255); // Blanco
+  TERMINAL_GREEN   = display.color565(0, 255, 0);     // Verde
+  TERMINAL_RED     = display.color565(255, 0, 0);     // Rojo
+  TERMINAL_BLUE    = display.color565(0, 0, 255);     // Azul
+  TERMINAL_YELLOW  = display.color565(255, 255, 0);   // Amarillo
+  TERMINAL_CYAN    = display.color565(0, 255, 255);   // Cian
+  TERMINAL_MAGENTA = display.color565(255, 0, 255);   // Magenta
+  TERMINAL_GRAY    = display.color565(128, 128, 128); // Gris
+  
+  display.fillScreen(TERMINAL_BLACK);
+  
+  // Header más compacto
+  display.setFont(&fonts::Font2);
+  display.setTextColor(TERMINAL_GREEN, TERMINAL_BLACK);
+  display.setCursor(2, 6); // Posición más alta y compacta
+  display.println("T-Deck SSH v1.2");
+  
+  // Líneas separadoras con color diferente para testing - ancho reducido
+  display.drawLine(0, 20, 310, 20, TERMINAL_BLUE); // 320->310px
+  display.drawLine(0, 215, 310, 215, TERMINAL_BLUE); // 320->310px
+  
+  // Conectar WiFi
+  addOutput("Starting terminal...");
+  addOutput("Connecting to WiFi: " + String(WIFI_SSID));
+  
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    attempts++;
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    addOutput("WiFi connected: " + WiFi.localIP().toString());
+    addOutput("Type 'ssh' to connect, 'help' for commands");
+  } else {
+    addOutput("WiFi connection failed");
+  }
+  
+  // Mostrar prompt inicial en la línea inferior
+  updateDisplay();
+}
+
+void loop() {
+  handleSSHData();
+  keyboard.poll();
+  handleTouch();
+  handleTrackball();
+  
+  while (keyboard.available()) {
+    uint8_t key = keyboard.read();
+    
+    if (key == 0x08 || key == 0x7F) { // Backspace
+      if (inputText.length() > 0) {
+        inputText = inputText.substring(0, inputText.length() - 1);
+        updateDisplay();
+      }
+    }
+    else if (key == 0x0A || key == 0x0D) { // Enter
+      if (sshConnected) {
+        sendSSHCommand(inputText);
+      } else {
+        executeCommand(inputText);
+      }
+      inputText = "";
+      updateDisplay();
+    }
+    else if (key >= 32 && key <= 126) { // Caracteres imprimibles
+      inputText += (char)key;
+      updateDisplay();
+    }
+  }
+  
+  delay(10);
+}
+
+void updateDisplay() {
+  // Limpiar COMPLETAMENTE el área del input (línea inferior)
+  display.fillRect(0, 215, 320, 25, TERMINAL_BLACK); // Área más grande para limpiar bien
+  
+  display.setFont(&fonts::Font2);
+  uint16_t textColor = sshConnected ? TERMINAL_YELLOW : TERMINAL_CYAN;
+  display.setTextColor(textColor, TERMINAL_BLACK);
+  
+  // Mostrar prompt en línea inferior
+  display.setCursor(7, 225); // Margen izquierdo aumentado de 2 a 7 píxeles
+  if (sshConnected) {
+    display.setTextColor(TERMINAL_RED, TERMINAL_BLACK); // SSH en rojo para destacar
+    display.print("SSH> ");
+  } else {
+    display.setTextColor(TERMINAL_CYAN, TERMINAL_BLACK); // Local en cian
+    display.print("t-deck> ");
+  }
+  
+  // Calcular espacio disponible para el input - más conservador
+  int promptWidth = sshConnected ? 48 : 64;
+  String displayInput = inputText;
+  int maxChars = (300 - promptWidth - 10) / 6; // Más conservador para evitar desbordamiento
+  
+  if (displayInput.length() > maxChars) {
+    displayInput = displayInput.substring(displayInput.length() - maxChars + 1);
+  }
+  
+  display.setCursor(promptWidth + 7, 225); // Espacio después del prompt ajustado
+  display.setTextColor(TERMINAL_WHITE, TERMINAL_BLACK); // Input en blanco
+  display.print(displayInput);
+  
+  // Cursor parpadeante en amarillo para visibilidad
+  int cursorX = promptWidth + 7 + displayInput.length() * 6; // Ajustado para el nuevo ancho
+  if (cursorX < 308) { // Dentro del área reducida (310-2px margen)
+    display.fillRect(cursorX, 222, 2, 10, TERMINAL_YELLOW);
+  }
+}
+
+void executeCommand(String cmd) {
+  if (sshConnected) return;
+  
+  addOutput("user@t-deck:~$ " + cmd);
+  
+  if (cmd == "ssh") {
+    connectSSH();
+  }
+  else if (cmd == "help") {
+    addOutput("T-Deck SSH Terminal v1.1");
+    addOutput("Commands: ssh, help, wifi, clear");
+    addOutput("Target: " + String(BRIDGE_HOST) + ":" + String(BRIDGE_PORT));
+  }
+  else if (cmd == "wifi") {
+    if (WiFi.status() == WL_CONNECTED) {
+      addOutput("WiFi: Connected");
+      addOutput("IP: " + WiFi.localIP().toString());
+    } else {
+      addOutput("WiFi: Not connected");
+    }
+  }
+  else if (cmd == "clear") {
+    terminalBuffer.clear();
+    scrollOffset = 0;
+    redrawTerminal();
+  }
+  else if (cmd != "") {
+    addOutput("Unknown: " + cmd);
+    addOutput("Type 'help' for commands");
+  }
+}
+
+void addOutput(String text) {
+  const int maxChars = 45; // Reducido para asegurar que no se corte
+  
+  // Dividir texto respetando palabras cuando sea posible
+  if (text.length() <= maxChars) {
+    terminalBuffer.push_back(text);
+  } else {
+    int startPos = 0;
+    while (startPos < text.length()) {
+      int endPos = min(startPos + maxChars, (int)text.length());
+      
+      // Si no estamos al final del texto, buscar el último espacio para cortar
+      if (endPos < text.length()) {
+        int lastSpace = text.lastIndexOf(' ', endPos);
+        if (lastSpace > startPos && (lastSpace - startPos) > (maxChars * 0.7)) {
+          endPos = lastSpace + 1; // +1 para incluir el espacio
+        }
+      }
+      
+      String chunk = text.substring(startPos, endPos);
+      chunk.trim(); // Eliminar espacios al inicio/final
+      if (chunk.length() > 0) {
+        terminalBuffer.push_back(chunk);
+      }
+      startPos = endPos;
+    }
+  }
+  
+  // Mantener buffer limitado
+  while (terminalBuffer.size() > 100) {
+    terminalBuffer.erase(terminalBuffer.begin());
+  }
+  
+  // Ajustar scroll para mostrar las últimas líneas
+  scrollOffset = max(0, (int)terminalBuffer.size() - 13);
+  redrawTerminal();
+}
+
+void redrawTerminal() {
+  // Limpiar área del terminal con fondo negro - ancho reducido 10px
+  display.fillRect(0, 25, 310, 185, TERMINAL_BLACK); // 320->310px
+  display.setFont(&fonts::Font2);
+  display.setTextColor(TERMINAL_WHITE, TERMINAL_BLACK);
+  
+  int y = 28; // Empezar más arriba
+  int lineHeight = 14; // +2 píxeles por línea como solicitado
+  int maxLines = 13; // Una línea más disponible
+  
+  for (int i = scrollOffset; i < terminalBuffer.size() && i < scrollOffset + maxLines; i++) {
+    if (y > 200) break; // Dejar espacio para el input inferior
+    display.setCursor(7, y); // Margen izquierdo aumentado de 2 a 7 píxeles
+    display.setTextColor(TERMINAL_GREEN, TERMINAL_BLACK); // Texto verde sobre fondo negro
+    display.println(terminalBuffer[i]);
+    y += lineHeight;
+  }
+  
+  outputLine = y;
+}
+
+void connectSSH() {
+  if (WiFi.status() != WL_CONNECTED) {
+    addOutput("Error: WiFi not connected");
+    return;
+  }
+  
+  addOutput("Connecting to " + String(BRIDGE_HOST) + ":" + String(BRIDGE_PORT));
+  
+  sshClient.setTimeout(5000);
+  
+  if (sshClient.connect(BRIDGE_HOST, BRIDGE_PORT)) {
+    sshConnected = true;
+    sshBuffer = "";
+    
+    addOutput("SSH Connected!");
+    addOutput("Remote terminal active");
+    addOutput("Type 'exit' to disconnect");
+    
+    // El prompt SSH ahora se maneja en updateDisplay() en la línea inferior
+    delay(500);
+    sshClient.println("echo 'T-Deck connected'");
+  } else {
+    addOutput("Connection FAILED!");
+    addOutput("Check server: " + String(BRIDGE_HOST));
+  }
+}
+
+void disconnectSSH() {
+  if (sshConnected) {
+    sshClient.stop();
+    sshConnected = false;
+    addOutput("SSH Disconnected");
+    // El prompt ahora se maneja en updateDisplay() en la línea inferior
+  }
+}
+
+void handleSSHData() {
+  if (!sshConnected) return;
+  
+  if (!sshClient.connected()) {
+    addOutput("Connection lost");
+    disconnectSSH();
+    return;
+  }
+  
+  String rawData = "";
+  static unsigned long lastDataTime = 0;
+  
+  while (sshClient.available()) {
+    char c = sshClient.read();
+    rawData += c;
+    lastDataTime = millis();
+    
+    // Para debugging de autocompletar
+    if (c == '\t' || c == 0x09) {
+      Serial.println("Received TAB character from SSH");
+    }
+    
+    if (c == '\n' || rawData.length() > 150) { // Aumentado buffer para evitar cortes
+      String cleanedData = cleanANSI(rawData);
+      
+      // Detectar posibles respuestas de autocompletar (múltiples opciones en una línea)
+      if (cleanedData.indexOf("  ") != -1 && cleanedData.length() > 20) {
+        Serial.println("Possible autocomplete response detected");
+        // Dividir las opciones si son múltiples comandos separados por espacios
+        String options = cleanedData;
+        options.trim();
+        if (options.length() > 0) {
+          addOutput("[TAB] " + options);
+        }
+      } else {
+        // Procesar línea por línea
+        String allData = sshBuffer + cleanedData; // Combinar con buffer previo
+        sshBuffer = ""; // Limpiar buffer
+        
+        int startPos = 0;
+        int newlinePos = allData.indexOf('\n');
+        
+        while (newlinePos != -1) {
+          String line = allData.substring(startPos, newlinePos);
+          line.trim();
+          if (line.length() > 0) {
+            addOutput(line);
+          }
+          startPos = newlinePos + 1;
+          newlinePos = allData.indexOf('\n', startPos);
+        }
+        
+        // Lo que queda sin \n va al buffer
+        if (startPos < allData.length()) {
+          String remaining = allData.substring(startPos);
+          remaining.trim();
+          if (remaining.length() > 0) {
+            sshBuffer = remaining;
+          }
+        }
+      }
+      
+      rawData = "";
+      
+      // Buffer más grande antes de forzar salida
+      if (sshBuffer.length() > 100) {
+        addOutput(sshBuffer);
+        sshBuffer = "";
+      }
+    }
+  }
+  
+  if (rawData.length() > 0) {
+    String cleanedData = cleanANSI(rawData);
+    cleanedData.trim();
+    if (cleanedData.length() > 0) {
+      sshBuffer += cleanedData;
+    }
+  }
+}
+
+void sendSSHCommand(String cmd) {
+  if (!sshConnected || !sshClient.connected()) {
+    addOutput("No SSH connection");
+    return;
+  }
+  
+  if (cmd == "exit" || cmd == "logout" || cmd == "disconnect") {
+    disconnectSSH();
+    return;
+  }
+  
+  sshClient.println(cmd);
+  sshClient.flush();
+}
+
+// Función super agresiva para limpiar códigos ANSI y caracteres especiales
+String cleanANSI(String input) {
+  String result = "";
+  bool inEscape = false;
+  bool inCSI = false;
+  bool inOSC = false;
+  
+  for (int i = 0; i < input.length(); i++) {
+    char c = input.charAt(i);
+    
+    // Detectar secuencias OSC ]0;, ]1;, ]2; etc
+    if (c == ']' && !inEscape) {
+      inOSC = true;
+      continue;
+    }
+    
+    // Detectar fin de secuencia OSC
+    if (inOSC) {
+      if (c == 7 || (c == '\\' && i > 0 && input.charAt(i-1) == '\033')) {
+        inOSC = false;
+      }
+      continue;
+    }
+    
+    // Detectar inicio de escape
+    if (c == 27 || c == '\033') {
+      inEscape = true;
+      continue;
+    }
+    
+    // Detectar CSI (Control Sequence Introducer)
+    if (inEscape && c == '[') {
+      inCSI = true;
+      inEscape = false;
+      continue;
+    }
+    
+    // Si estamos en CSI, esperar terminador
+    if (inCSI) {
+      if ((c >= '@' && c <= '~') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+        inCSI = false;
+      }
+      continue;
+    }
+    
+    // Si estamos en escape normal
+    if (inEscape) {
+      if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '~' || c == 'm') {
+        inEscape = false;
+      }
+      continue;
+    }
+    
+    // Filtrar solo caracteres de control básicos, pero permitir UTF-8 y acentos
+    if (c < 32 && c != '\n' && c != '\t') continue;
+    if (c == 127 || c == '\r') continue; // DEL y CR
+    
+    // NO filtrar caracteres UTF-8 ni acentuados (>126)
+    // Solo filtrar caracteres problemáticos específicos
+    if (c == '�') continue; // Solo el carácter de reemplazo UTF-8
+    
+    // Filtrar prompts duplicados específicos
+    String substr = input.substring(i);
+    if (substr.startsWith("@casaos:") || substr.startsWith("pids@")) {
+      // Saltar hasta el siguiente $
+      while (i < input.length() && input.charAt(i) != '$' && input.charAt(i) != '\n') {
+        i++;
+      }
+      if (i < input.length() && input.charAt(i) == '$') {
+        i++; // Saltar el $
+      }
+      continue;
+    }
+    
+    result += c;
+  }
+  
+  return result;
+}
+
+void handleTouch() {
+  int16_t x[5], y[5];
+  uint8_t touchCount = touch.getPoint(x, y, 5);
+  
+  if (touchCount > 0) {
+    touchX = x[0];
+    touchY = y[0];
+    
+    // Solo procesar touch en el área de terminal (líneas 25-210, ancho 310px)
+    if (touchY >= 25 && touchY <= 210 && touchX <= 310) {
+      if (!touchPressed) {
+        // Comenzar touch
+        touchPressed = true;
+      }
+    }
+  } else if (touchPressed) {
+    // Touch terminado
+    touchPressed = false;
+  }
+  
+  // Touch scroll: deslizar hacia arriba/abajo en el área de terminal
+  static int16_t lastTouchY = 0;
+  static unsigned long lastTouchTime = 0;
+  static bool scrolling = false;
+  
+  if (touchPressed && touchY >= 25 && touchY <= 210 && touchX <= 310) {
+    unsigned long currentTime = millis();
+    
+    if (scrolling && (currentTime - lastTouchTime) > 50) { // Throttle scroll
+      int16_t deltaY = touchY - lastTouchY;
+      
+      if (deltaY > 10) {  // Deslizar hacia abajo = scroll hacia arriba
+        scrollUp();
+        lastTouchTime = currentTime;
+      } else if (deltaY < -10) { // Deslizar hacia arriba = scroll hacia abajo
+        scrollDown();
+        lastTouchTime = currentTime;
+      }
+    }
+    
+    lastTouchY = touchY;
+    scrolling = true;
+  } else {
+    scrolling = false;
+  }
+}
+
+void handleTrackball() {
+  static unsigned long lastTrackballTime = 0;
+  unsigned long currentTime = millis();
+  
+  if ((currentTime - lastTrackballTime) > 100) { // Throttle trackball
+    if (trackballUpPressed) {
+      scrollUp();
+      trackballUpPressed = false;
+      lastTrackballTime = currentTime;
+    }
+    
+    if (trackballDownPressed) {
+      scrollDown();
+      trackballDownPressed = false;
+      lastTrackballTime = currentTime;
+    }
+    
+    if (trackballLeftPressed) {
+      // Opcional: scroll horizontal o navegación
+      trackballLeftPressed = false;
+      lastTrackballTime = currentTime;
+    }
+    
+    if (trackballRightPressed) {
+      // Opcional: scroll horizontal o navegación
+      trackballRightPressed = false;
+      lastTrackballTime = currentTime;
+    }
+    
+    if (trackballClickPressed) {
+      // Enviar TAB cuando se presiona el trackball
+      sendTabCommand();
+      trackballClickPressed = false;
+      lastTrackballTime = currentTime;
+    }
+  }
+}
+
+void scrollUp() {
+  if (scrollOffset > 0) {
+    scrollOffset--;
+    redrawTerminal();
+  }
+}
+
+void scrollDown() {
+  int maxLines = 13; // Actualizado para coincidir con redrawTerminal
+  int maxOffset = max(0, (int)terminalBuffer.size() - maxLines);
+  
+  if (scrollOffset < maxOffset) {
+    scrollOffset++;
+    redrawTerminal();
+  }
+}
+
+void sendTabCommand() {
+  if (sshConnected && sshClient.connected()) {
+    // Enviar carácter TAB (0x09) al servidor SSH
+    sshClient.write(0x09);
+    sshClient.flush();
+    
+    // Para debugging, mostrar en Serial que se envió TAB
+    Serial.println("TAB sent to SSH - waiting for server response...");
+    
+    // Mostrar indicador visual en pantalla - ajustado para ancho reducido
+    display.fillRect(290, 225, 15, 10, TERMINAL_YELLOW); // 300->290px
+    
+    // Opcional: enviar doble TAB si no hay respuesta (común en bash)
+    delay(150);
+    if (sshClient.available() == 0 && inputText.length() > 0) {
+      sshClient.write(0x09); // Segundo TAB para mostrar opciones
+      sshClient.flush();
+      Serial.println("Double TAB sent to SSH for options");
+    }
+    
+    // Restaurar el display después de un momento
+    delay(50);
+    updateDisplay();
+  } else {
+    // En modo local, agregar espacios o mostrar ayuda
+    if (inputText.length() > 0) {
+      // Buscar comandos que coincidan con el texto actual
+      String commands[] = {"ssh", "help", "wifi", "clear", "exit"};
+      int commandCount = 5;
+      
+      for (int i = 0; i < commandCount; i++) {
+        if (commands[i].startsWith(inputText)) {
+          inputText = commands[i];
+          updateDisplay();
+          return;
+        }
+      }
+      
+      // Si no hay coincidencias, añadir espacios
+      inputText += "    "; // 4 espacios como TAB
+      updateDisplay();
+    } else {
+      // Mostrar comandos disponibles si no hay texto
+      addOutput("Available commands: ssh, help, wifi, clear");
+    }
+  }
+}
