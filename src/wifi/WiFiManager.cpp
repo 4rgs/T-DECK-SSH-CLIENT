@@ -251,8 +251,6 @@ String WiFiManager::getStatusString() {
   switch (WiFi.status()) {
     case WL_CONNECTED:
       return "Connected";
-    case WL_CONNECTING:
-      return "Connecting";
     case WL_DISCONNECTED:
       return "Disconnected";
     case WL_NO_SHIELD:
@@ -266,7 +264,7 @@ String WiFiManager::getStatusString() {
     case WL_CONNECTION_LOST:
       return "Connection Lost";
     default:
-      return "Unknown";
+      return "Connecting";
   }
 }
 

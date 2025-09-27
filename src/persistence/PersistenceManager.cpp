@@ -24,7 +24,7 @@ std::vector<SavedWiFiNetwork> PersistenceManager::loadSavedNetworks() {
   preferences.getBytes("networks", buffer, schLen);
   preferences.end();
   
-  DynamicJsonDocument doc(2048);
+  JsonDocument doc;
   DeserializationError error = deserializeJson(doc, buffer);
   
   if (error) {
@@ -52,11 +52,11 @@ std::vector<SavedWiFiNetwork> PersistenceManager::loadSavedNetworks() {
 void PersistenceManager::saveSavedNetworks(const std::vector<SavedWiFiNetwork>& networks) {
   preferences.begin("wifi", false); // Lectura/escritura
   
-  DynamicJsonDocument doc(2048);
+  JsonDocument doc;
   JsonArray networksArray = doc.to<JsonArray>();
   
   for (const SavedWiFiNetwork& network : networks) {
-    JsonObject net = networksArray.createNestedObject();
+    JsonObject net = networksArray.add<JsonObject>();
     net["ssid"] = network.ssid;
     net["password"] = network.password;
     net["rssi"] = network.rssi;
@@ -89,7 +89,7 @@ std::vector<SSHHost> PersistenceManager::loadSSHHosts() {
   preferences.getBytes("hosts", buffer, schLen);
   preferences.end();
   
-  DynamicJsonDocument doc(2048);
+  JsonDocument doc;
   DeserializationError error = deserializeJson(doc, buffer);
   
   if (error) {
@@ -118,11 +118,11 @@ std::vector<SSHHost> PersistenceManager::loadSSHHosts() {
 void PersistenceManager::saveSSHHosts(const std::vector<SSHHost>& hosts) {
   preferences.begin("ssh", false); // Lectura/escritura
   
-  DynamicJsonDocument doc(2048);
+  JsonDocument doc;
   JsonArray hostsArray = doc.to<JsonArray>();
   
   for (const SSHHost& host : hosts) {
-    JsonObject h = hostsArray.createNestedObject();
+    JsonObject h = hostsArray.add<JsonObject>();
     h["name"] = host.name;
     h["ip"] = host.ip;
     h["port"] = host.port;

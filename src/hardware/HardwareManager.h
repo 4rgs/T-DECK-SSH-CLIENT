@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <LovyanGFX.hpp>
+#include "../keyboard/Keyboard.h"
 
 // Configuración de LovyanGFX para T-Deck
 class LGFX : public lgfx::LGFX_Device {
@@ -28,6 +29,9 @@ private:
   
   // Touch
   int touchIntPin;
+  
+  // Teclado
+  Keyboard keyboard;
   
   // Batería
   float batteryVoltage;
@@ -68,6 +72,11 @@ public:
   bool isTouchPressed();
   void getTouchCoordinates(int& x, int& y);
   bool isTouchInArea(int x, int y, int width, int height, int touchX, int touchY);
+  
+  // Teclado
+  void updateKeyboard();
+  bool isKeyAvailable();
+  uint8_t readKey();
   
   // Estado del sistema
   bool isHardwareOK();

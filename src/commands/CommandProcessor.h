@@ -17,6 +17,7 @@ private:
   void processSavedCommand();
   void processForgetCommand(const std::vector<String>& args);
   void processHostsCommand();
+  void processPasswordCommand();
   void processScanCommand();
   void processClearCommand();
   void processExitCommand();

@@ -36,6 +36,7 @@ public:
   bool connectToHost(SSHHost host, String password);
   void disconnect();
   bool isSSHConnected();
+  bool isSSHConnecting();
   String getCurrentHost();
   String getCurrentUser();
   

@@ -116,21 +116,21 @@ knownHosts.push_back({"Mi Servidor", "192.168.1.100", 22, "admin"});
 ```
 tdeck_ssh_terminal/
 ├── src/
-│   ├── main.cpp                 # Código principal (monolítico)
-│   ├── main_modular.cpp         # Código principal (modular v2.0)
-│   ├── hardware/                # Gestión de hardware T-Deck
-│   ├── wifi/                    # Gestión WiFi y redes
-│   ├── ssh/                     # Conexiones SSH y hosts
-│   ├── persistence/             # Almacenamiento persistente
-│   ├── ui/                      # Interfaz de usuario
-│   ├── commands/                # Procesamiento de comandos
-│   ├── keyboard/                # Entrada de teclado
-│   └── display/                 # Configuración de pantalla
+│   ├── main.cpp                 # 🚀 Código principal (arquitectura modular v2.0)
+│   ├── hardware/                # 🔧 Gestión de hardware T-Deck
+│   ├── wifi/                    # 📡 Gestión WiFi y redes
+│   ├── ssh/                     # 🖥️ Conexiones SSH y hosts
+│   ├── persistence/             # 💾 Almacenamiento persistente
+│   ├── ui/                      # 🎨 Interfaz de usuario
+│   ├── commands/                # ⌨️ Procesamiento de comandos
+│   ├── keyboard/                # ⌨️ Entrada de teclado
+│   ├── display/                 # 🖼️ Configuración de pantalla
+│   └── backup_legacy/           # 🗄️ Código legacy (deprecated)
 ├── include/
-│   └── config.h                # Configuración centralizada
-├── platformio.ini              # Configuración PlatformIO
-├── README.md                   # Este archivo
-└── MODULAR_ARCHITECTURE.md     # Documentación de la arquitectura
+│   └── config.h                # ⚙️ Configuración centralizada
+├── platformio.ini              # 🔧 Configuración PlatformIO
+├── README.md                   # 📖 Este archivo
+└── MODULAR_ARCHITECTURE.md     # 🏗️ Documentación de la arquitectura
 ```
 
 ## 🔄 Sistema de Persistencia
