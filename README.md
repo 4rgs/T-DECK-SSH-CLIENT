@@ -2,6 +2,15 @@
 
 Un terminal SSH completo para LilyGO T-Deck ESP32-S3 con interfaz táctil, gestión de WiFi y descubrimiento automático de hosts.
 
+## 🏗️ **Nueva Arquitectura Modular v2.0**
+
+El proyecto ha sido **completamente refactorizado** con una arquitectura modular que mejora significativamente la mantenibilidad y escalabilidad:
+
+- 📁 **6 módulos especializados** (Hardware, WiFi, SSH, Persistence, UI, Commands)
+- 🔧 **Separación de responsabilidades** para mejor organización
+- 🚀 **Fácil mantenimiento y extensión** de funcionalidades
+- 📖 **[Ver documentación completa de la arquitectura](MODULAR_ARCHITECTURE.md)**
+
 ## 🚀 Características
 
 ### 🖥️ Terminal SSH Completo
@@ -107,11 +116,21 @@ knownHosts.push_back({"Mi Servidor", "192.168.1.100", 22, "admin"});
 ```
 tdeck_ssh_terminal/
 ├── src/
-│   └── main.cpp                 # Código principal
+│   ├── main.cpp                 # Código principal (monolítico)
+│   ├── main_modular.cpp         # Código principal (modular v2.0)
+│   ├── hardware/                # Gestión de hardware T-Deck
+│   ├── wifi/                    # Gestión WiFi y redes
+│   ├── ssh/                     # Conexiones SSH y hosts
+│   ├── persistence/             # Almacenamiento persistente
+│   ├── ui/                      # Interfaz de usuario
+│   ├── commands/                # Procesamiento de comandos
+│   ├── keyboard/                # Entrada de teclado
+│   └── display/                 # Configuración de pantalla
 ├── include/
-│   └── config.h                # Configuración
+│   └── config.h                # Configuración centralizada
 ├── platformio.ini              # Configuración PlatformIO
-└── README.md                   # Este archivo
+├── README.md                   # Este archivo
+└── MODULAR_ARCHITECTURE.md     # Documentación de la arquitectura
 ```
 
 ## 🔄 Sistema de Persistencia
